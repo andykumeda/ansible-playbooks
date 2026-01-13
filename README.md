@@ -26,8 +26,8 @@ Professional Ansible playbooks for managing Cisco network infrastructure (IOS-XE
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/ansible-network-automation.git
-   cd ansible-network-automation
+   git clone https://github.com/andykumeda/ansible-playbooks.git
+   cd ansible-playbooks
    ```
 
 2. **Configure inventory**:
