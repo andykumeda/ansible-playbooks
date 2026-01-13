@@ -1,0 +1,58 @@
+---
+# ============================================================================
+# Site-Wide Configuration Orchestration
+# ============================================================================
+# Purpose: Main playbook that orchestrates complete site configuration
+# Features:
+#   - Modular design with separate playbooks for each function
+#   - Tag-based selective execution
+#   - Imports common baseline, user management, SNMP, and logging configs
+#
+# Usage Examples:
+#   ansible-playbook site.yml                    # Run all configurations
+#   ansible-playbook site.yml --tags users       # Only configure users
+#   ansible-playbook site.yml --tags common      # Only baseline config
+#   ansible-playbook site.yml --limit dc1        # Only DC1 devices
+#   ansible-playbook site.yml -C                 # Check mode (dry-run)
+#
+# Playbook Execution Order:
+#   1. common.yml - Baseline infrastructure (banner, DNS, NTP, SSH, etc.)
+#   2. users_unified.yml - User account management
+#   3. snmpv3.yml - SNMP monitoring configuration
+#   4. logging.yml - Syslog configuration
+# ============================================================================
+
+- name: Configure entire site
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - group_vars/users  # Load user definitions (vault-encrypted)
+
+# ----------------------------------------------------------------------------
+# Baseline Infrastructure Configuration
+# ----------------------------------------------------------------------------
+# Applies standard settings to all devices: banner, DNS, NTP, SSH, timezone
+- import_playbook: common.yml
+  tags: common
+
+# ----------------------------------------------------------------------------
+# User Management
+# ----------------------------------------------------------------------------
+# Configures user accounts with SSH keys and passwords across all platforms
+- import_playbook: users_unified.yml
+  tags: users
+
+# ----------------------------------------------------------------------------
+# SNMP Monitoring
+# ----------------------------------------------------------------------------
+# Configures SNMPv3 with authentication and encryption for monitoring
+- import_playbook: snmpv3.yml
+  tags: snmp
+
+# ----------------------------------------------------------------------------
+# Centralized Logging
+# ----------------------------------------------------------------------------
+# Configures syslog servers for centralized log collection
+- import_playbook: logging.yml
+  tags: logging
+

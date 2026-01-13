@@ -1,0 +1,39 @@
+---
+- name: Test Connection on IOS-XE devices
+  hosts: all:!lab_nexus
+  gather_facts: false
+  connection: network_cli
+  remote_user: ansible
+
+  tasks:
+    - name: Test connection
+      cisco.ios.ios_command:
+        commands: "show version"
+      register: result
+      ignore_errors: true
+
+    - name: Debug connection result
+      debug:
+        var: result
+
+- name: Test Connection on NX-OS devices
+  hosts: lab_nexus
+  gather_facts: false
+  connection: network_cli
+  become: no
+  remote_user: ansible
+  vars:
+    ansible_become: false
+  vars_files:
+    - group_vars/nxos_secret.yml
+
+  tasks:
+    - name: Test connection
+      ansible.netcommon.cli_command:
+        command: "show version"
+      register: result
+      ignore_errors: true
+
+    - name: Debug connection result
+      debug:
+        var: result

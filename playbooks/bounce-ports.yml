@@ -1,0 +1,38 @@
+# Bounce (disable/enable) ports on a specific VLAN
+# ansible-playbook -l <hostname_or_ip> playbooks/bounce-ports.yml -e vlan_id=<vlan_number>
+# assumes interface begins with Fi
+
+- name: Shut down and bring up all ports in a specific VLAN
+  hosts: switches
+  gather_facts: no
+  tasks:
+
+    - name: Gather interfaces in the specified VLAN
+      ios_command:
+        commands:
+          - show vlan id {{ vlan_id }}
+      register: vlan_output
+
+    - name: Parse interfaces in the VLAN
+      set_fact:
+        vlan_interfaces: >-
+          {%- set interfaces = [] -%}
+          {%- for line in vlan_output.stdout[0].split('\n') -%}
+            {%- if line.startswith('Fi') -%}
+              {%- set _ = interfaces.extend(line.split() | map('trim') | list) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ interfaces | map('regex_replace', ',$', '') | list }}
+
+    - name: Debug parsed interfaces
+      debug:
+        var: vlan_interfaces
+
+    - name: Shut down and bring up interfaces
+      ios_config:
+        lines:
+          - shutdown
+          - no shutdown
+        parents: "{{ 'interface ' + item }}"
+      loop: "{{ vlan_interfaces }}"
+

@@ -1,0 +1,13 @@
+- name: Route tasks to correct device-specific playbooks
+  hosts: ios
+  gather_facts: no
+  tasks:
+    - name: Run IOS-XE users playbook
+      import_playbook: playbooks/iosxe_users.yml
+
+- name: Route NXOS devices
+  hosts: lab_nexus
+  gather_facts: no
+  tasks:
+    - name: Run NXOS users playbook
+      import_playbook: playbooks/nxos_users.yml

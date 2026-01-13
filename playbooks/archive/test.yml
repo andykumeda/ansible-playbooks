@@ -1,0 +1,32 @@
+- name: Configure users
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - group_vars/users
+
+  tasks:
+  - name: Configure SSH keys for users
+    cisco.ios.ios_command:
+      commands:
+        - "configure terminal"
+        - "ip ssh pubkey-chain"
+        - "username {{ item.name }}"
+        - "key-string"
+    loop: "{{ ssh_users }}"
+    register: result
+    when: ssh_users is defined
+
+  - name: Send SSH key chunks
+    cisco.ios.ios_command:
+      commands:
+        - "{{ key_chunk }}"
+    loop: "{{ (lookup('file', result.results[0].item.keyfile) | regex_replace('\\s+$', '')).split(' ') }}"
+    loop_control:
+      loop_var: key_chunk
+    when: ssh_users is defined
+
+  - name: Exit from pubkey-chain mode
+    cisco.ios.ios_command:
+      commands:
+        - "exit"
+        - "exit"

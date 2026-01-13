@@ -1,0 +1,61 @@
+---
+- name: Map DHCP IPs to Physical Switch Ports
+  hosts: switches
+  gather_facts: no
+  
+  vars:
+    output_file: "dhcp_port_mapping.csv"
+    
+  tasks:
+    - name: Collect DHCP binding information
+      ios_command:
+        commands: show ip dhcp binding
+      register: dhcp_bindings
+      
+    - name: Collect MAC address table
+      ios_command:
+        commands: show mac address-table
+      register: mac_table
+      
+    - name: Parse DHCP bindings
+      set_fact:
+        dhcp_dict: "{{ {} }}"
+      
+    - name: Build DHCP dictionary
+      set_fact:
+        dhcp_dict: "{{ dhcp_dict | combine({item.split()[0]: item.split()[1]}) }}"
+      loop: "{{ dhcp_bindings.stdout[0].split('\n') }}"
+      when: item.split() | length >= 2 and item.split()[0] | ipaddr
+      
+    - name: Parse MAC address table
+      set_fact:
+        mac_dict: "{{ {} }}"
+        
+    - name: Build MAC dictionary
+      set_fact:
+        mac_dict: "{{ mac_dict | combine({item.split()[1]: item.split()[-1]}) }}"
+      loop: "{{ mac_table.stdout[0].split('\n') }}"
+      when: item.split() | length >= 4 and item.split()[1] | regex_search('^([0-9A-Fa-f]{4}[.]){2}[0-9A-Fa-f]{4}$')
+      
+    - name: Create IP to Port mapping
+      set_fact:
+        ip_port_mapping: []
+        
+    - name: Build IP to Port mapping
+      set_fact:
+        ip_port_mapping: "{{ ip_port_mapping + [{'ip': ip, 'mac': mac, 'port': mac_dict[mac] if mac in mac_dict else 'Not Found'}] }}"
+      loop: "{{ dhcp_dict | dict2items }}"
+      vars:
+        ip: "{{ item.key }}"
+        mac: "{{ item.value }}"
+        
+    - name: Display results
+      debug:
+        msg: "IP: {{ item.ip }} | MAC: {{ item.mac }} | Port: {{ item.port }}"
+      loop: "{{ ip_port_mapping }}"
+      
+    - name: Save results to CSV
+      copy:
+        content: "IP Address,MAC Address,Switch Port\n{% for item in ip_port_mapping %}{{ item.ip }},{{ item.mac }},{{ item.port }}\n{% endfor %}"
+        dest: "{{ output_file }}"
+      delegate_to: localhost

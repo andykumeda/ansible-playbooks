@@ -1,0 +1,27 @@
+- name: Configure Interfaces on Cisco Cat 9K
+  hosts: switches
+  gather_facts: no
+  vars:
+    csv_file: "{{ playbook_dir }}/Port-Matrix.csv"
+
+  tasks:
+    - name: Read CSV file
+      ansible.builtin.read_csv:
+        path: "{{ csv_file }}"
+      register: csv_data
+
+    - name: Configure interfaces
+      cisco.ios.ios_config:
+        parents:
+          - "interface {{ interface_data.Int }}{{ interface_data.Blade }}/0/{{ interface_data.Port }}"
+        lines:
+          - "description PP: {{ interface_data.PP | default('N/A') }} | Room: {{ interface_data.Room | default('N/A') }} | Group: {{ interface_data.Description | default('N/A') }}"
+        replace: line
+      loop: "{{ csv_data.list }}"
+      loop_control:
+        loop_var: interface_data
+      when:
+        - interface_data.Blade | length > 0
+        - interface_data.Port | length > 0
+ 
+

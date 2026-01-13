@@ -1,0 +1,50 @@
+---
+- name: Configure SNMP
+  hosts: all
+  gather_facts: false
+
+  tasks:
+
+  - name: SNMP 
+    cisco.ios.ios_snmp_server:
+      config:
+        groups:
+          - group: snmpgroup
+            version: v3
+            version_option: priv
+            read: SNMPView
+            write: SNMPView
+        views:
+          - name: SNMPView
+            family_name: iso
+            included: true
+          - name: snmpview
+            family_name: internet
+            included: true
+            #communities: 
+            #- name: HCA-SNMP-RO
+            #acl_v4: RO
+        location: "HCA IT HQ"
+        hosts:
+          - host: "{{ snmp_monitoring_host }}"
+            version: 3
+            version_option: priv
+            community_string: snmpuser
+        users: 
+          - username: snmpuser
+            group: snmpgroup
+            version: v3
+            authentication:
+              #algorithm: md5
+              algorithm: sha
+              password: "{{ snmp_auth_pass }}"
+            encryption:
+              #priv: des
+              priv: aes
+              priv_option: 128
+              password: "{{ snmp_priv_pass }}"
+      state: replaced
+
+  - name: Save config if modified
+    cisco.ios.ios_config:
+      save_when: modified

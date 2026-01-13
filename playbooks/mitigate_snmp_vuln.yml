@@ -1,0 +1,50 @@
+---
+- name: Mitigate Cisco SNMP Vulnerability (cisco-sa-snmp-x4LPhte)
+  hosts: all
+  gather_facts: no
+  connection: network_cli
+
+  tasks:
+    - name: Check if SNMP is running
+      cisco.ios.ios_command:
+        commands:
+          - show snmp
+      register: snmp_status
+
+    - name: Fail if SNMP is not running
+      fail:
+        msg: "SNMP is not configured or running on this device. Skipping mitigation."
+      when: "'%SNMP agent not enabled' in snmp_status.stdout[0]"
+
+    - name: Check SNMP configuration for v2 or v3
+      cisco.ios.ios_command:
+        commands:
+          - show running-config | include snmp-server (community|group)
+      register: snmp_config
+      when: "'%SNMP agent not enabled' not in snmp_status.stdout[0]"
+
+    - name: Apply SNMP View
+      cisco.ios.ios_config:
+        lines:
+          - snmp-server view NO_BAD_SNMP iso included
+          - snmp-server view NO_BAD_SNMP snmpUsmMIB excluded
+          - snmp-server view NO_BAD_SNMP snmpVacmMIB excluded
+          - snmp-server view NO_BAD_SNMP snmpCommunityMIB excluded
+          - snmp-server view NO_BAD_SNMP cafSessionMethodsInfoEntry excluded
+      when: "'%SNMP agent not enabled' not in snmp_status.stdout[0]"
+
+    - name: Mitigate for SNMPv2
+      cisco.ios.ios_config:
+        lines:
+          - "snmp-server community {{ snmp_community_string }} view NO_BAD_SNMP RO"
+      when:
+        - "'%SNMP agent not enabled' not in snmp_status.stdout[0]"
+        - "'community' in snmp_config.stdout[0]"
+
+    - name: Mitigate for SNMPv3
+      cisco.ios.ios_config:
+        lines:
+          - "snmp-server group {{ snmp_v3_group }} v3 auth read NO_BAD_SNMP write NO_BAD_SNMP"
+      when:
+        - "'%SNMP agent not enabled' not in snmp_status.stdout[0]"
+        - "'group' in snmp_config.stdout[0]"

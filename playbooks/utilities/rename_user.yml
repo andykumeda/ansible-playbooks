@@ -1,0 +1,27 @@
+---
+# rename_user.yml - Generic user rename/replacement playbook
+# Usage: ansible-playbook rename_user.yml -e "old_username=admin new_username=newadmin"
+# Note: Define new_user_password_hash in vault-encrypted variables
+
+- name: Configure users
+  hosts: all
+  gather_facts: false
+
+  tasks:
+
+    - name: Remove old user
+      cisco.ios.ios_user:
+        name: "{{ old_username }}"
+        state: absent
+      when: old_username is defined
+
+    - name: Add new user
+      cisco.ios.ios_user:
+        name: "{{ new_username }}"
+        hashed_password: "{{ new_user_password_hash }}"
+        privilege: 15
+        state: present
+      when: 
+        - new_username is defined
+        - new_user_password_hash is defined
+

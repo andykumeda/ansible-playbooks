@@ -1,0 +1,33 @@
+---
+# disable_mcpuser.yml - Temporarily disable mcpuser on failed devices
+
+- name: Disable mcpuser account temporarily
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Disable mcpuser on IOS-XE devices
+      cisco.ios.ios_config:
+        lines:
+          - "no username mcpuser"
+      when: ansible_network_os == 'ios' or ansible_network_os is not defined
+
+    - name: Disable mcpuser on NX-OS devices
+      cisco.nxos.nxos_config:
+        lines:
+          - "no username mcpuser"
+      when: ansible_network_os == 'nxos'
+
+    - name: Save configuration
+      cisco.ios.ios_config:
+        save_when: modified
+      when: ansible_network_os == 'ios' or ansible_network_os is not defined
+
+    - name: Save NX-OS configuration
+      cisco.nxos.nxos_config:
+        save_when: modified
+      when: ansible_network_os == 'nxos'
+
+    - name: Display completion message
+      debug:
+        msg: "✅ mcpuser account disabled on {{ inventory_hostname }}"

@@ -1,0 +1,85 @@
+- name: Check for OS version and generate upgrade report
+  hosts: all
+  gather_facts: yes
+  vars:
+    ios_latest_version: "{{ ios_target_version }}"
+    nxos_latest_version: "{{ nxos_target_version }}"
+    report_file: "{{ upgrade_report_path }}"
+    collect_ios: true
+
+  tasks:
+    - name: Normalize OS detection
+      set_fact:
+        _os_lower: "{{ (ansible_network_os | default('')) | lower }}"
+
+    - name: Derive simple OS booleans
+      set_fact:
+        is_ios: "{{ '_ios' in _os_lower or 'ios' in _os_lower }}"
+        is_nxos: "{{ 'nxos' in _os_lower }}"
+
+    - name: Ensure local temp dir exists for per-host reports
+      delegate_to: localhost
+      run_once: true
+      file:
+        path: /tmp/version_checker
+        state: directory
+
+    - name: Ensure upgrade_report.txt on localhost (empty)
+      delegate_to: localhost
+      run_once: true
+      copy:
+        content: ""
+        dest: "{{ report_file }}"
+        force: yes
+
+    - block:
+        - name: Gather IOS version via cli_command
+          when: is_ios and collect_ios
+          ansible.builtin.cli_command:
+            command: show version
+          register: ios_cli_version
+
+        - name: Set IOS version fact
+          when: is_ios and collect_ios and (ios_cli_version is defined)
+          set_fact:
+            ios_version: "{{ (ios_cli_version.stdout | default('')) | regex_search('Version\\\\s+([^,]+)', '\\\\1') | first | default('unknown') }}"
+
+        - name: Write IOS result to temp file
+          when: is_ios and collect_ios and (ios_version is defined)
+          lineinfile:
+            path: "/tmp/version_checker/{{ inventory_hostname }}.txt"
+            line: "{{ inventory_hostname }} needs an upgrade from {{ ios_version }} to {{ ios_latest_version }}"
+          delegate_to: localhost
+          run_once: false
+      when: is_ios
+
+    - block:
+        - name: Gather NX-OS version via cli_command
+          when: is_nxos
+          ansible.builtin.cli_command:
+            command: show version
+          register: nxos_cli_version
+
+        - name: Set NX-OS version fact
+          when: is_nxos and (nxos_cli_version is defined)
+          set_fact:
+            nxos_version: "{{ (nxos_cli_version.stdout | default('')) | regex_search('NXOS:\\s+version\\s+([^\\n]+)', '\\\\1') | first | default('unknown') }}"
+
+        - name: Write NX-OS result to temp file
+          when: is_nxos and (nxos_version is defined)
+          lineinfile:
+            path: "/tmp/version_checker/{{ inventory_hostname }}.txt"
+            line: "{{ inventory_hostname }} needs an upgrade from {{ nxos_version }} to {{ nxos_latest_version }}"
+          delegate_to: localhost
+          run_once: false
+      when: is_nxos
+
+    - name: Assemble final report on localhost
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        mkdir -p /opt/ansible/playbooks
+        if ls /tmp/version_checker/*.txt 1> /dev/null 2>&1; then
+          cat /tmp/version_checker/*.txt > "{{ report_file }}"
+          rm -f /tmp/version_checker/*.txt
+        fi

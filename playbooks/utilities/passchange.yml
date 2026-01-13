@@ -1,0 +1,27 @@
+- name: Change ansible user password
+  hosts: all
+  gather_facts: false
+  vars:
+    new_ansible_password: "{{ ansible_new_password }}"  # Pass as extra var
+    
+  tasks:
+  - name: Update ansible user password
+    cisco.ios.ios_user:
+      name: ansible
+      configured_password: "{{ new_ansible_password }}"
+      privilege: 15
+      state: present
+    register: password_change_result
+
+  - name: Save configuration
+    cisco.ios.ios_config:
+      save_when: always
+    when: password_change_result.changed
+
+  - name: Test new password by reconnecting
+    cisco.ios.ios_command:
+      commands:
+        - "show clock"
+    vars:
+      ansible_password: "{{ new_ansible_password }}"
+    delegate_to: "{{ inventory_hostname }}"

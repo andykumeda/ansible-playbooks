@@ -1,0 +1,52 @@
+---
+- name: Gather IP, MAC, VLAN, and Port details from a Cisco switch
+  hosts: all
+  gather_facts: no
+  tasks:
+
+    - name: Retrieve DHCP bindings
+      cisco.ios.ios_command:
+        commands:
+          - show ip dhcp binding
+      register: dhcp_bindings
+
+    - name: Retrieve MAC address table
+      cisco.ios.ios_command:
+        commands:
+          - show mac address-table
+      register: mac_table
+
+    - name: Retrieve ARP table
+      cisco.ios.ios_command:
+        commands:
+          - show ip arp
+      register: arp_table
+
+    - name: Parse DHCP bindings into structured data
+      set_fact:
+        dhcp_data: "{{ dhcp_bindings.stdout_lines[0] | parse_dhcp_bindings }}"
+
+    - name: Parse MAC address table into structured data
+      set_fact:
+        mac_data: "{{ mac_table.stdout_lines[0] | parse_mac_table }}"
+
+    - name: Parse ARP table into structured data
+      set_fact:
+        arp_data: "{{ arp_table.stdout_lines[0] | parse_arp_table }}"
+
+    - name: Combine data and generate output
+      vars:
+        table_data: []
+      set_fact:
+        table_data: "{{ table_data + [{'IP': item.ip, 'MAC': item.mac, 'VLAN': item.vlan, 'Port': item.port}]
+                        for item in dhcp_data if item.mac in mac_data }}"
+      
+    - name: Save output to JSON file
+      copy:
+        content: "{{ table_data | to_json }}"
+        dest: ./ip_mac_vlan_port.json
+
+    - name: Display output as a table
+      debug:
+        msg: "{{ table_data }}"
+

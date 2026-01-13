@@ -1,0 +1,34 @@
+---
+- name: Logging Configuration
+  hosts: all
+  gather_facts: no
+
+  tasks:
+
+  - name: Apply the provided configuration
+    cisco.ios.ios_logging_global:
+      config:
+        buffered:
+          severity: notifications
+          size: 5099
+        console:
+          severity: critical
+        facility: local5
+        hosts:
+          - hostname: "{{ syslog_host1 }}"
+            #- hostname: "{{ syslog_host2 }}"
+            xml: true
+            transport:
+              tcp:
+                port: 514
+        monitor:
+          severity: warnings
+        message_counter: log
+        snmp_trap:
+          - errors
+        trap: errors
+        userinfo: true
+        logging_on: enable
+        exception: 4099
+        cns_events: warnings
+      state: overridden

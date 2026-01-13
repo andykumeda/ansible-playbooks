@@ -1,0 +1,91 @@
+---
+- name: Configure Standard Parameters
+  hosts: all
+  gather_facts: false
+#  vars_files:
+#    - group_vars/itb.yml
+
+  tasks:
+
+  - name: Banner
+    cisco.ios.ios_banner:
+      banner: login
+      text: "{{ lookup('file', './group_vars/banner.txt') }}" 
+      state: present
+
+  - name: Hostname and domain
+    cisco.ios.ios_system:
+#      hostname: "{{ hostname }}"
+      domain_name: "{{ domain_name }}"
+      lookup_enabled: true
+
+  - name: Configure name servers
+    cisco.ios.ios_system:
+      name_servers:
+        - "{{ name_server1 }}"
+        - "{{ name_server2 }}"
+
+  - name: Configure NTP servers
+    cisco.ios.ios_ntp_global:
+      config:
+        servers:
+          - server: "{{ ntp_server1 }}"
+        #source: "{{ ntp_source_int }}"
+      state: replaced
+
+      #- name: Create default user
+      #cisco.ios.ios_user:
+      #name: ansible
+      #sshkey:
+      #- "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+      #privilege: 15
+      #state: present
+
+  - name: System configs
+    cisco.ios.ios_service:
+      config:
+        timestamps:
+          - msg: debug
+            enable: true
+            timestamp: datetime
+          - msg: log
+            enable: true
+            timestamp: datetime
+            datetime_options:
+              localtime: true
+              show_timezone: true
+        password_encryption: true
+      state: merged
+
+
+  - name: Misc commands
+    cisco.ios.ios_config:
+      lines:
+        # turn on IP routing
+        - ip routing
+
+        # gen crypto key
+        - crypto key gen rsa gen mod 2048
+
+        # use SSH V2
+        - ip ssh version 2
+
+        # set timezone and daylight savings
+        # no idea why I have to double-quote this to work
+        - "clock timezone {{ timezone }} {{ offset }}"  
+        - clock summer-time "{{ daylight_savings }}" recurring 
+
+        # license
+        - license boot level network-advantage addon dna-advantage 
+
+  - name: switches only
+    cisco.ios.ios_config:
+      lines:
+      # turn on VTP transparancy
+      - vtp mode transparent
+    when: "'switches' in group_names"
+
+
+  - name: Save config if modified
+    cisco.ios.ios_config:
+      save_when: modified

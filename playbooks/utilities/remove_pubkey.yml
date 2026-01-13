@@ -1,0 +1,20 @@
+---
+- name: Remove pubkeys
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - group_vars/users
+
+  tasks:
+
+  - name: remove pubkey
+    ios_config:
+      lines:
+        - "no username ansible"
+      parents:
+        - "ip ssh pubkey-chain"
+      match: none
+
+  - name: Save config if modified
+    cisco.ios.ios_config:
+      save_when: modified

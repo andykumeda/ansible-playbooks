@@ -1,0 +1,117 @@
+---
+# Unified user management playbook for both IOS-XE and NX-OS
+# Usage: ansible-playbook -i inventory users_unified.yml --vault-password-file .vault_pass.txt
+
+- name: Configure users on Cisco devices (auto-detect OS)
+  hosts: all
+  gather_facts: yes
+  no_log: true
+  vars_files:
+    - group_vars/users
+  
+  tasks:
+    - name: Display detected OS
+      debug:
+        msg: "Detected OS: {{ ansible_network_os | default('unknown') }}"
+      when: ansible_network_os is defined
+
+    # IOS-XE Tasks
+    - name: Configure SSH keys for users (IOS-XE)
+      cisco.ios.ios_user:
+        name: "{{ item.name }}"
+        privilege: "{{ item.privilege }}"
+        state: present
+        sshkey: "{{ lookup('file', item.keyfile) }}"
+      loop: "{{ ssh_users | default([]) }}"
+      when: 
+        - ssh_users is defined
+        - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+
+    - name: Create users with hashed passwords (IOS-XE)
+      cisco.ios.ios_user:
+        name: "{{ item.name }}"
+        privilege: "{{ item.privilege }}"
+        hashed_password:
+          type: 9
+          value: "{{ item.hashed_password }}"
+        state: present
+      loop: "{{ password_users }}"
+      when: 
+        - password_users is defined
+        - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+
+    # NX-OS Tasks
+    - name: Configure SSH keys for users (NX-OS)
+      cisco.nxos.nxos_user:
+        name: "{{ item.name }}"
+        roles: "{{ item.nxos_role }}"
+        state: present
+        sshkey: "{{ lookup('file', item.keyfile) }}"
+      loop: "{{ ssh_users | default([]) }}"
+      when: 
+        - ssh_users is defined
+        - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
+
+    - name: Create users with hashed passwords (NX-OS)
+      cisco.nxos.nxos_user:
+        name: "{{ item.name }}"
+        roles: "{{ item.nxos_role }}"
+        hashed_password: "{{ item.nxos_hashed_password }}"
+        state: present
+      loop: "{{ password_users }}"
+      when: 
+        - password_users is defined
+        - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
+
+    # Common cleanup tasks
+    - name: Get current usernames from device (IOS-XE)
+      cisco.ios.ios_command:
+        commands:
+          - "show running-config | include ^username"
+      register: current_users_output
+      when: ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+
+    - name: Get current usernames from device (NX-OS)
+      cisco.nxos.nxos_command:
+        commands:
+          - "show running-config | include ^username"
+      register: current_users_output
+      when: ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
+
+    - name: Extract current usernames
+      set_fact:
+        current_usernames: "{{ current_users_output.stdout[0] | regex_findall('username (\\S+)') }}"
+        desired_usernames: "{{ ((ssh_users | default([])) + (password_users | default([]))) | map(attribute='name') | list }}"
+      when: current_users_output is defined
+
+    - name: Remove users not in desired list (IOS-XE)
+      cisco.ios.ios_user:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ current_usernames | difference(desired_usernames) }}"
+      when: 
+        - current_usernames is defined
+        - current_usernames | difference(desired_usernames) | length > 0
+        - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+      ignore_errors: yes
+
+    - name: Remove users not in desired list (NX-OS)
+      cisco.nxos.nxos_user:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ (current_usernames | difference(desired_usernames)) | reject('equalto', 'admin') }}"
+      when: 
+        - current_usernames is defined
+        - current_usernames | difference(desired_usernames) | length > 0
+        - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
+      ignore_errors: yes
+
+    - name: Save config if modified (IOS-XE)
+      cisco.ios.ios_config:
+        save_when: modified
+      when: ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+
+    - name: Save config if modified (NX-OS)
+      cisco.nxos.nxos_config:
+        save_when: modified
+      when: ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'

@@ -1,0 +1,12 @@
+---
+- hosts: old_switch
+  gather_facts: no
+  tasks:
+    - name: Get running config
+      cisco.ios.ios_config:
+        backup: yes
+      register: config
+    
+    - name: Display config
+      debug:
+        msg: "{{ config.backup_path | lookup('file') }}"
