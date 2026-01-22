@@ -8,7 +8,7 @@
   no_log: true
   vars_files:
     - group_vars/users
-  
+
   tasks:
     - name: Display detected OS
       debug:
@@ -23,7 +23,7 @@
         state: present
         sshkey: "{{ lookup('file', item.keyfile) }}"
       loop: "{{ ssh_users | default([]) }}"
-      when: 
+      when:
         - ssh_users is defined
         - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
 
@@ -36,7 +36,7 @@
           value: "{{ item.hashed_password }}"
         state: present
       loop: "{{ password_users }}"
-      when: 
+      when:
         - password_users is defined
         - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
 
@@ -48,7 +48,7 @@
         state: present
         sshkey: "{{ lookup('file', item.keyfile) }}"
       loop: "{{ ssh_users | default([]) }}"
-      when: 
+      when:
         - ssh_users is defined
         - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
 
@@ -59,7 +59,7 @@
         hashed_password: "{{ item.nxos_hashed_password }}"
         state: present
       loop: "{{ password_users }}"
-      when: 
+      when:
         - password_users is defined
         - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
 
@@ -68,28 +68,36 @@
       cisco.ios.ios_command:
         commands:
           - "show running-config | include ^username"
-      register: current_users_output
+      register: current_users_ios
       when: ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
 
     - name: Get current usernames from device (NX-OS)
       cisco.nxos.nxos_command:
         commands:
           - "show running-config | include ^username"
-      register: current_users_output
+      register: current_users_nxos
       when: ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
 
-    - name: Extract current usernames
+    - name: Define desired usernames
       set_fact:
-        current_usernames: "{{ current_users_output.stdout[0] | regex_findall('username (\\S+)') }}"
         desired_usernames: "{{ ((ssh_users | default([])) + (password_users | default([]))) | map(attribute='name') | list }}"
-      when: current_users_output is defined
+
+    - name: Extract current usernames (IOS-XE)
+      set_fact:
+        current_usernames: "{{ current_users_ios.stdout[0] | regex_findall('username (\\S+)') }}"
+      when: ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
+
+    - name: Extract current usernames (NX-OS)
+      set_fact:
+        current_usernames: "{{ current_users_nxos.stdout[0] | regex_findall('username (\\S+)') }}"
+      when: ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
 
     - name: Remove users not in desired list (IOS-XE)
       cisco.ios.ios_user:
         name: "{{ item }}"
         state: absent
       loop: "{{ current_usernames | difference(desired_usernames) }}"
-      when: 
+      when:
         - current_usernames is defined
         - current_usernames | difference(desired_usernames) | length > 0
         - ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios'
@@ -100,7 +108,7 @@
         name: "{{ item }}"
         state: absent
       loop: "{{ (current_usernames | difference(desired_usernames)) | reject('equalto', 'admin') }}"
-      when: 
+      when:
         - current_usernames is defined
         - current_usernames | difference(desired_usernames) | length > 0
         - ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
